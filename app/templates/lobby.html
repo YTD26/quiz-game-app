@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lobby - Wachten op start</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🕰️ Wachten op Start...</h1>
+        
+        <div class="game-code-display">
+            <h2>Game Code</h2>
+            <div class="code" id="gameCode"></div>
+        </div>
+        
+        <div class="player-list">
+            <h2>Spelers in Lobby (<span id="playerCount">0</span>)</h2>
+            <div id="playersList"></div>
+        </div>
+        
+        <div id="statusMessage" class="alert alert-info">
+            Wachten tot de host het spel start...
+        </div>
+    </div>
+    
+    <script>
+        const gameCode = '{{ game_code }}';
+        const playerName = sessionStorage.getItem('player_name') || 'Onbekend';
+        
+        document.getElementById('gameCode').textContent = gameCode;
+        
+        // WebSocket verbinding
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws/${gameCode}/${playerName}`);
+        
+        ws.onopen = () => {
+            console.log('WebSocket verbonden');
+        };
+        
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            
+            switch(message.type) {
+                case 'player_joined':
+                    updatePlayerCount(message.data.player_count);
+                    loadPlayers();
+                    break;
+                    
+                case 'player_left':
+                    loadPlayers();
+                    break;
+                    
+                case 'game_starting':
+                    document.getElementById('statusMessage').textContent = 'Spel start nu!';
+                    break;
+                    
+                case 'question_start':
+                    // Ga naar game scherm
+                    window.location.href = `/game/${gameCode}`;
+                    break;
+            }
+        };
+        
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            document.getElementById('statusMessage').textContent = 'Verbindingsfout';
+            document.getElementById('statusMessage').className = 'alert alert-error';
+        };
+        
+        ws.onclose = () => {
+            console.log('WebSocket verbinding gesloten');
+        };
+        
+        function updatePlayerCount(count) {
+            document.getElementById('playerCount').textContent = count;
+        }
+        
+        async function loadPlayers() {
+            try {
+                const response = await fetch(`/api/game/${gameCode}/players`);
+                const players = await response.json();
+                
+                const playersList = document.getElementById('playersList');
+                playersList.innerHTML = '';
+                
+                players.forEach(player => {
+                    const playerDiv = document.createElement('div');
+                    playerDiv.className = 'player-item';
+                    playerDiv.innerHTML = `
+                        <span class="player-name">${player.player_name}</span>
+                        <span class="player-status" style="background: ${player.is_connected ? 'var(--secondary-color)' : '#95a5a6'}"></span>
+                    `;
+                    playersList.appendChild(playerDiv);
+                });
+                
+                updatePlayerCount(players.length);
+            } catch (error) {
+                console.error('Fout bij laden spelers:', error);
+            }
+        }
+        
+        // Initieel spelers laden
+        loadPlayers();
+    </script>
+</body>
+</html>

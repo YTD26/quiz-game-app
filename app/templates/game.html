@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Game - Spelen</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="question-container">
+            <div id="questionInfo">
+                <p>Vraag <span id="questionNumber">1</span> van <span id="totalQuestions">10</span></p>
+            </div>
+            
+            <div class="question-timer" id="timer">30</div>
+            
+            <h2 class="question-text" id="questionText">Laden...</h2>
+            
+            <div class="answers-grid" id="answersGrid"></div>
+            
+            <div id="feedback" style="margin-top: 20px; text-align: center; font-size: 1.2rem; font-weight: bold;"></div>
+        </div>
+    </div>
+    
+    <script>
+        const gameCode = '{{ game_code }}';
+        const playerName = sessionStorage.getItem('player_name');
+        const playerId = parseInt(sessionStorage.getItem('player_id'));
+        
+        let currentQuestion = null;
+        let timeLimit = 30;
+        let startTime = null;
+        let timerInterval = null;
+        let answered = false;
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws/${gameCode}/${playerName}`);
+        
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            
+            switch(message.type) {
+                case 'question_start':
+                    displayQuestion(message.data);
+                    break;
+                    
+                case 'question_end':
+                    showResults(message.data);
+                    break;
+                    
+                case 'game_finished':
+                    setTimeout(() => {
+                        window.location.href = `/results/${gameCode}`;
+                    }, 2000);
+                    break;
+            }
+        };
+        
+        function displayQuestion(data) {
+            currentQuestion = data.question;
+            timeLimit = currentQuestion.time_limit;
+            startTime = Date.now();
+            answered = false;
+            
+            document.getElementById('questionNumber').textContent = data.question_number;
+            document.getElementById('totalQuestions').textContent = data.total_questions;
+            document.getElementById('questionText').textContent = currentQuestion.question_text;
+            document.getElementById('feedback').textContent = '';
+            
+            // Start timer
+            updateTimer();
+            timerInterval = setInterval(updateTimer, 100);
+            
+            // Toon antwoorden
+            const answersGrid = document.getElementById('answersGrid');
+            answersGrid.innerHTML = '';
+            
+            const colors = ['#e74c3c', '#3498db', '#f39c12', '#2ecc71'];
+            
+            currentQuestion.answers.forEach((answer, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'answer-btn btn-primary';
+                btn.style.background = colors[index % colors.length];
+                btn.textContent = answer.answer_text;
+                btn.onclick = () => submitAnswer(answer.id);
+                answersGrid.appendChild(btn);
+            });
+        }
+        
+        function updateTimer() {
+            const elapsed = (Date.now() - startTime) / 1000;
+            const remaining = Math.max(0, timeLimit - elapsed);
+            
+            document.getElementById('timer').textContent = remaining.toFixed(1);
+            
+            if (remaining === 0 && !answered) {
+                clearInterval(timerInterval);
+                disableAnswers();
+                document.getElementById('feedback').textContent = '⏱️ Tijd is op!';
+                document.getElementById('feedback').style.color = 'var(--danger-color)';
+            }
+        }
+        
+        async function submitAnswer(answerId) {
+            if (answered) return;
+            
+            answered = true;
+            clearInterval(timerInterval);
+            
+            const timeTaken = Date.now() - startTime;
+            
+            try {
+                const response = await fetch('/api/game/answer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        game_code: gameCode,
+                        player_id: playerId,
+                        question_id: currentQuestion.id,
+                        answer_id: answerId,
+                        time_taken: timeTaken
+                    })
+                });
+                
+                const result = await response.json();
+                
+                // Toon feedback
+                const feedback = document.getElementById('feedback');
+                if (result.is_correct) {
+                    feedback.textContent = `✅ Correct! +${result.points} punten`;
+                    feedback.style.color = 'var(--secondary-color)';
+                } else {
+                    feedback.textContent = '❌ Fout antwoord';
+                    feedback.style.color = 'var(--danger-color)';
+                }
+                
+                disableAnswers();
+                
+                // Notify via WebSocket
+                ws.send(JSON.stringify({
+                    type: 'answer_submitted',
+                    data: { player_id: playerId }
+                }));
+                
+            } catch (error) {
+                console.error('Fout bij versturen antwoord:', error);
+            }
+        }
+        
+        function disableAnswers() {
+            const buttons = document.querySelectorAll('.answer-btn');
+            buttons.forEach(btn => btn.disabled = true);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Resultaten</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 Eindresultaten</h1>
+        
+        <div class="game-code-display">
+            <h2>Game</h2>
+            <div class="code" id="gameCode">{{ game_code }}</div>
+        </div>
+        
+        <div class="leaderboard" id="leaderboard"></div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="/" class="btn btn-primary">Nieuwe Game</a>
+            <a href="/admin" class="btn btn-secondary">Admin Panel</a>
+        </div>
+    </div>
+    
+    <script>
+        const gameCode = '{{ game_code }}';
+        
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch(`/api/game/${gameCode}/leaderboard`);
+                const data = await response.json();
+                
+                const leaderboard = document.getElementById('leaderboard');
+                leaderboard.innerHTML = '<h2>Scoreboard</h2>';
+                
+                if (data.entries.length === 0) {
+                    leaderboard.innerHTML += '<p>Geen scores beschikbaar</p>';
+                    return;
+                }
+                
+                data.entries.forEach((entry, index) => {
+                    const item = document.createElement('div');
+                    item.className = `leaderboard-item rank-${index + 1}`;
+                    
+                    let medal = '';
+                    if (index === 0) medal = '🥇';
+                    else if (index === 1) medal = '🥈';
+                    else if (index === 2) medal = '🥉';
+                    
+                    item.innerHTML = `
+                        <span class="rank">${medal || (index + 1)}</span>
+                        <div class="player-info">
+                            <strong>${entry.player_name}</strong>
+                            <br>
+                            <small>${entry.correct_answers} van ${data.total_questions} correct</small>
+                        </div>
+                        <span class="score">${entry.total_score}</span>
+                    `;
+                    
+                    leaderboard.appendChild(item);
+                });
+                
+            } catch (error) {
+                console.error('Fout bij laden scoreboard:', error);
+                document.getElementById('leaderboard').innerHTML = '<p class="alert alert-error">Kan scoreboard niet laden</p>';
+            }
+        }
+        
+        loadLeaderboard();
+    </script>
+</body>
+</html>
