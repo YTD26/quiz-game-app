@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Game - Speler</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Quiz Game</h1>
+        <p style="text-align: center;">Welkom! Voer de game code in om te starten.</p>
+        
+        <form id="joinForm">
+            <div class="form-group">
+                <label for="gameCode">Game Code</label>
+                <input type="text" id="gameCode" name="gameCode" placeholder="123456" maxlength="6" pattern="[0-9]{6}" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="playerName">Jouw Naam</label>
+                <input type="text" id="playerName" name="playerName" placeholder="Je naam" maxlength="100" required>
+            </div>
+            
+            <div id="errorMessage" class="alert alert-error" style="display: none;"></div>
+            
+            <button type="submit" class="btn btn-primary btn-block">Deelnemen 🚀</button>
+        </form>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <p>Ben je de host?</p>
+            <a href="/admin" class="btn btn-secondary">Naar Admin Panel</a>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('joinForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const gameCode = document.getElementById('gameCode').value;
+            const playerName = document.getElementById('playerName').value;
+            const errorDiv = document.getElementById('errorMessage');
+            
+            errorDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/game/join', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        game_code: gameCode,
+                        player_name: playerName
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Sla speler info op
+                    sessionStorage.setItem('player_id', data.id);
+                    sessionStorage.setItem('player_name', playerName);
+                    sessionStorage.setItem('game_code', gameCode);
+                    
+                    // Ga naar lobby
+                    window.location.href = `/lobby/${gameCode}`;
+                } else {
+                    errorDiv.textContent = data.detail || 'Er ging iets mis';
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Kan geen verbinding maken met de server';
+                errorDiv.style.display = 'block';
+            }
+        });
+        
+        // Auto-format game code
+        document.getElementById('gameCode').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '').substring(0, 6);
+        });
+    </script>
+</body>
+</html>
